@@ -1,4 +1,3 @@
-
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -17,16 +16,13 @@ import {
 } from "@/components/ui/sidebar";
 import { 
   LayoutDashboard, 
-  FileInvoice, 
-  ClipboardList, 
-  BarChart3, 
   Settings, 
   Bell, 
   MessageSquareText,
   LogOut,
-  Users,
-  PenTool
+  Users
 } from "lucide-react";
+import { FileInvoice, ClipboardList, BarChart3, PenTool } from "@/components/Icons";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;

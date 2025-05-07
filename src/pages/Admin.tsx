@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -134,7 +133,7 @@ const Admin = () => {
                     <div className="flex items-center gap-4">
                       <p className="font-medium">{invoice.amount.toFixed(2)} €</p>
                       <Badge variant={
-                        invoice.status === 'paid' ? "success" : 
+                        invoice.status === 'paid' ? "default" : 
                         invoice.status === 'overdue' ? "destructive" : "outline"
                       }>
                         {invoice.status === 'paid' ? 'Payée' : 

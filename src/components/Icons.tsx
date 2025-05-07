@@ -1,4 +1,9 @@
 
-import { FileInvoice, ClipboardList, PenTool, BarChart3 } from "lucide-react";
+import { FileText, ClipboardCheck, Pen, BarChart2 } from "lucide-react";
 
-export { FileInvoice, ClipboardList, PenTool, BarChart3 };
+// Export les icônes renommées pour maintenir la compatibilité avec notre code
+export const FileInvoice = FileText;
+export const ClipboardList = ClipboardCheck;
+export const PenTool = Pen;
+export const BarChart3 = BarChart2;
+
