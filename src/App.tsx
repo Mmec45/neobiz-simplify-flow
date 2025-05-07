@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import DashboardLayout from "@/components/DashboardLayout";
+import AIAssistant from "./pages/AIAssistant";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,15 @@ const App = () => (
               <AuthGuard requireAdmin>
                 <DashboardLayout>
                   <Admin />
+                </DashboardLayout>
+              </AuthGuard>
+            } />
+
+            {/* AI Assistant route */}
+            <Route path="/ai-assistant" element={
+              <AuthGuard>
+                <DashboardLayout>
+                  <AIAssistant />
                 </DashboardLayout>
               </AuthGuard>
             } />
@@ -71,17 +81,6 @@ const App = () => (
                 <DashboardLayout>
                   <div className="p-6">
                     <h1 className="text-3xl font-bold mb-6">Tableau financier</h1>
-                    <p>Cette fonctionnalité sera disponible prochainement.</p>
-                  </div>
-                </DashboardLayout>
-              </AuthGuard>
-            } />
-
-            <Route path="/ai-assistant" element={
-              <AuthGuard>
-                <DashboardLayout>
-                  <div className="p-6">
-                    <h1 className="text-3xl font-bold mb-6">Assistant IA</h1>
                     <p>Cette fonctionnalité sera disponible prochainement.</p>
                   </div>
                 </DashboardLayout>
