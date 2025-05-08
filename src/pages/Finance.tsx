@@ -2,66 +2,34 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { useToast } from '@/components/ui/use-toast';
+import { BarChart3, PlusCircle, ArrowUpCircle, ArrowDownCircle, Trash } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useForm } from 'react-hook-form';
-import * as z from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { format, parseISO, subMonths, startOfMonth, endOfMonth } from 'date-fns';
-import { AreaChart, BarChart, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Plus, Filter, Wallet, ArrowUpRight, ArrowDownRight, ChartPie, CircleDollarSign } from 'lucide-react';
+import * as z from 'zod';
+import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { Textarea } from '@/components/ui/textarea';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
-// Définir le schéma pour la création/modification de transactions
-const transactionSchema = z.object({
+const transactionFormSchema = z.object({
   amount: z.string().min(1, "Le montant est requis"),
-  category: z.string().min(1, "La catégorie est requise"),
-  type: z.string().min(1, "Le type est requis"),
+  type: z.string(),
   description: z.string().optional(),
-  transaction_date: z.string().min(1, "La date est requise"),
+  category: z.string().min(1, "La catégorie est requise"),
+  transaction_date: z.string().optional(),
 });
 
-// Définir le schéma pour la création/modification de catégories
-const categorySchema = z.object({
+const categoryFormSchema = z.object({
   name: z.string().min(1, "Le nom est requis"),
   type: z.string().min(1, "Le type est requis"),
-  color: z.string().min(1, "La couleur est requise"),
+  color: z.string().optional(),
 });
 
 const Finance = () => {
@@ -72,33 +40,26 @@ const Finance = () => {
   const [loading, setLoading] = useState(true);
   const [openTransactionDialog, setOpenTransactionDialog] = useState(false);
   const [openCategoryDialog, setOpenCategoryDialog] = useState(false);
-  const [timeRange, setTimeRange] = useState('month');
-  const [financialSummary, setFinancialSummary] = useState({
-    totalIncome: 0,
-    totalExpenses: 0,
-    balance: 0,
-    monthlyIncome: 0,
-    monthlyExpenses: 0,
-    monthlyBalance: 0,
-  });
+  const [period, setPeriod] = useState('month');
+  const [reportData, setReportData] = useState<any>({});
   
-  const transactionForm = useForm<z.infer<typeof transactionSchema>>({
-    resolver: zodResolver(transactionSchema),
+  const transactionForm = useForm<z.infer<typeof transactionFormSchema>>({
+    resolver: zodResolver(transactionFormSchema),
     defaultValues: {
       amount: "",
-      category: "",
       type: "expense",
       description: "",
+      category: "",
       transaction_date: format(new Date(), "yyyy-MM-dd"),
     },
   });
-  
-  const categoryForm = useForm<z.infer<typeof categorySchema>>({
-    resolver: zodResolver(categorySchema),
+
+  const categoryForm = useForm<z.infer<typeof categoryFormSchema>>({
+    resolver: zodResolver(categoryFormSchema),
     defaultValues: {
       name: "",
       type: "expense",
-      color: "#9b87f5",
+      color: "#" + Math.floor(Math.random() * 16777215).toString(16),
     },
   });
 
@@ -110,28 +71,26 @@ const Finance = () => {
       try {
         setLoading(true);
         
-        // Fetch categories
-        const { data: categoriesData, error: categoriesError } = await supabase
-          .from('financial_categories')
-          .select('*')
-          .eq('user_id', user.id);
-          
-        if (categoriesError) throw categoriesError;
+        const [transactionsResult, categoriesResult] = await Promise.all([
+          supabase
+            .from('transactions')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('transaction_date', { ascending: false }),
+            
+          supabase
+            .from('financial_categories')
+            .select('*')
+            .eq('user_id', user.id)
+        ]);
         
-        setCategories(categoriesData || []);
+        if (transactionsResult.error) throw transactionsResult.error;
+        if (categoriesResult.error) throw categoriesResult.error;
         
-        // Fetch transactions
-        const { data: transactionsData, error: transactionsError } = await supabase
-          .from('transactions')
-          .select('*')
-          .order('transaction_date', { ascending: false });
-          
-        if (transactionsError) throw transactionsError;
+        setTransactions(transactionsResult.data || []);
+        setCategories(categoriesResult.data || []);
         
-        setTransactions(transactionsData || []);
-        
-        // Calculate financial summary
-        calculateFinancialSummary(transactionsData || []);
+        generateReports(transactionsResult.data || [], categoriesResult.data || [], period);
       } catch (error) {
         console.error('Error fetching financial data:', error);
         toast({
@@ -145,114 +104,112 @@ const Finance = () => {
     };
     
     fetchData();
-  }, [user, toast]);
-
-  // Calculate financial summary
-  const calculateFinancialSummary = (transactionsData: any[]) => {
-    const now = new Date();
-    const currentMonthStart = startOfMonth(now);
-    
-    const totalIncome = transactionsData
-      .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-      
-    const totalExpenses = transactionsData
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-      
-    const monthlyTransactions = transactionsData.filter(t => 
-      new Date(t.transaction_date) >= currentMonthStart
-    );
-    
-    const monthlyIncome = monthlyTransactions
-      .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-      
-    const monthlyExpenses = monthlyTransactions
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-      
-    setFinancialSummary({
-      totalIncome,
-      totalExpenses,
-      balance: totalIncome - totalExpenses,
-      monthlyIncome,
-      monthlyExpenses,
-      monthlyBalance: monthlyIncome - monthlyExpenses,
-    });
-  };
-
-  // Submit transaction form
-  const onTransactionSubmit = async (values: z.infer<typeof transactionSchema>) => {
+  }, [user, toast, period]);
+  
+  const onTransactionSubmit = async (values: z.infer<typeof transactionFormSchema>) => {
     try {
+      // Fix: ensure required fields are defined
       const transactionData = {
-        ...values,
         user_id: user?.id,
         amount: parseFloat(values.amount),
+        type: values.type,
+        description: values.description,
+        category: values.category,
+        transaction_date: values.transaction_date || format(new Date(), "yyyy-MM-dd"),
       };
+      
+      // Validate required fields before insertion
+      if (!transactionData.amount || !transactionData.type || !transactionData.category) {
+        throw new Error("Missing required fields");
+      }
       
       const { error } = await supabase
         .from('transactions')
-        .insert(transactionData);
+        .insert({
+          user_id: transactionData.user_id,
+          amount: transactionData.amount,
+          type: transactionData.type,
+          description: transactionData.description,
+          category: transactionData.category,
+          transaction_date: transactionData.transaction_date,
+        });
         
       if (error) throw error;
       
       // Refresh transactions
-      const { data } = await supabase
+      const { data: updatedTransactions, error: fetchError } = await supabase
         .from('transactions')
         .select('*')
+        .eq('user_id', user?.id)
         .order('transaction_date', { ascending: false });
         
-      setTransactions(data || []);
-      calculateFinancialSummary(data || []);
+      if (fetchError) throw fetchError;
+      
+      setTransactions(updatedTransactions || []);
+      generateReports(updatedTransactions || [], categories, period);
       setOpenTransactionDialog(false);
       transactionForm.reset({
         amount: "",
-        category: "",
         type: "expense",
         description: "",
+        category: "",
         transaction_date: format(new Date(), "yyyy-MM-dd"),
       });
       
       toast({
         title: "Succès",
-        description: "Transaction créée avec succès",
+        description: "Transaction enregistrée avec succès",
       });
     } catch (error) {
-      console.error('Error creating transaction:', error);
+      console.error('Error saving transaction:', error);
       toast({
         title: "Erreur",
-        description: "Impossible de créer la transaction",
+        description: "Impossible d'enregistrer la transaction",
         variant: "destructive",
       });
     }
   };
-
-  // Submit category form
-  const onCategorySubmit = async (values: z.infer<typeof categorySchema>) => {
+  
+  const onCategorySubmit = async (values: z.infer<typeof categoryFormSchema>) => {
     try {
+      // Fix: ensure required fields are defined
       const categoryData = {
-        ...values,
         user_id: user?.id,
+        name: values.name,
+        type: values.type,
+        color: values.color,
       };
+      
+      // Validate required fields before insertion
+      if (!categoryData.name || !categoryData.type) {
+        throw new Error("Missing required fields");
+      }
       
       const { error } = await supabase
         .from('financial_categories')
-        .insert(categoryData);
+        .insert({
+          user_id: categoryData.user_id,
+          name: categoryData.name,
+          type: categoryData.type,
+          color: categoryData.color,
+        });
         
       if (error) throw error;
       
       // Refresh categories
-      const { data } = await supabase
+      const { data: updatedCategories, error: fetchError } = await supabase
         .from('financial_categories')
-        .select('*');
+        .select('*')
+        .eq('user_id', user?.id);
         
-      setCategories(data || []);
+      if (fetchError) throw fetchError;
+      
+      setCategories(updatedCategories || []);
       setOpenCategoryDialog(false);
       categoryForm.reset({
         name: "",
         type: "expense",
-        color: "#9b87f5",
+        color: "#" + Math.floor(Math.random() * 16777215).toString(16),
       });
       
       toast({
@@ -269,85 +226,147 @@ const Finance = () => {
     }
   };
 
-  // Prepare data for charts
-  const getChartData = () => {
-    const now = new Date();
-    let startDate;
-    
-    switch(timeRange) {
-      case 'year':
-        startDate = subMonths(now, 12);
-        break;
-      case 'quarter':
-        startDate = subMonths(now, 3);
-        break;
-      default:
-        startDate = subMonths(now, 1);
-    }
-    
-    const filteredTransactions = transactions.filter(t => 
-      new Date(t.transaction_date) >= startDate
-    );
-    
-    // Monthly data for area chart
-    const monthlyData = [];
-    let currentDate = startDate;
-    
-    while (currentDate <= now) {
-      const monthStart = startOfMonth(currentDate);
-      const monthEnd = endOfMonth(currentDate);
-      const monthLabel = format(currentDate, "MMM yyyy");
-      
-      const monthIncome = filteredTransactions
-        .filter(t => 
-          t.type === 'income' &&
-          new Date(t.transaction_date) >= monthStart &&
-          new Date(t.transaction_date) <= monthEnd
-        )
-        .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+  const handleDeleteTransaction = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id);
         
-      const monthExpenses = filteredTransactions
-        .filter(t => 
-          t.type === 'expense' &&
-          new Date(t.transaction_date) >= monthStart &&
-          new Date(t.transaction_date) <= monthEnd
-        )
-        .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-        
-      monthlyData.push({
-        month: monthLabel,
-        revenus: monthIncome,
-        dépenses: monthExpenses,
-        balance: monthIncome - monthExpenses,
-      });
+      if (error) throw error;
       
-      currentDate = new Date(currentDate.setMonth(currentDate.getMonth() + 1));
+      // Update local state
+      const updatedTransactions = transactions.filter(transaction => transaction.id !== id);
+      setTransactions(updatedTransactions);
+      generateReports(updatedTransactions, categories, period);
+      
+      toast({
+        title: "Succès",
+        description: "Transaction supprimée avec succès",
+      });
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de supprimer la transaction",
+        variant: "destructive",
+      });
     }
-    
-    // Category data for pie chart
-    const expensesByCategory = {};
-    filteredTransactions
-      .filter(t => t.type === 'expense')
-      .forEach(t => {
-        if (!expensesByCategory[t.category]) {
-          expensesByCategory[t.category] = 0;
-        }
-        expensesByCategory[t.category] += parseFloat(t.amount);
-      });
-      
-    const pieChartData = Object.entries(expensesByCategory)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => (b as any).value - (a as any).value);
-    
-    return {
-      monthlyData,
-      pieChartData,
-    };
   };
 
-  const { monthlyData, pieChartData } = getChartData();
-  
-  const COLORS = ['#9b87f5', '#7E69AB', '#6E59A5', '#0EA5E9', '#F97316', '#D946EF', '#FEC6A1'];
+  const generateReports = (transactions: any[], categories: any[], period: string) => {
+    // Calculate financial summary
+    let income = 0;
+    let expense = 0;
+    let filteredTransactions = [...transactions];
+    
+    // Filter transactions based on period
+    const now = new Date();
+    
+    if (period === 'month') {
+      // Current month
+      const startOfMonthDate = startOfMonth(now);
+      const endOfMonthDate = endOfMonth(now);
+      filteredTransactions = transactions.filter(t => {
+        const transactionDate = new Date(t.transaction_date);
+        return transactionDate >= startOfMonthDate && transactionDate <= endOfMonthDate;
+      });
+    } else if (period === '3months') {
+      // Last 3 months
+      const threeMonthsAgo = subMonths(now, 3);
+      filteredTransactions = transactions.filter(t => new Date(t.transaction_date) >= threeMonthsAgo);
+    } else if (period === '6months') {
+      // Last 6 months
+      const sixMonthsAgo = subMonths(now, 6);
+      filteredTransactions = transactions.filter(t => new Date(t.transaction_date) >= sixMonthsAgo);
+    }
+    
+    // Calculate total income and expense
+    filteredTransactions.forEach(transaction => {
+      if (transaction.type === 'income') {
+        income += transaction.amount;
+      } else {
+        expense += transaction.amount;
+      }
+    });
+    
+    // Generate category data for charts
+    const incomeByCategory: Record<string, number> = {};
+    const expenseByCategory: Record<string, number> = {};
+    const categoryColors: Record<string, string> = {};
+    
+    // Initialize with all categories
+    categories.forEach(cat => {
+      if (cat.type === 'income') {
+        incomeByCategory[cat.name] = 0;
+      } else {
+        expenseByCategory[cat.name] = 0;
+      }
+      categoryColors[cat.name] = cat.color || '#' + Math.floor(Math.random() * 16777215).toString(16);
+    });
+    
+    // Sum up transactions by category
+    filteredTransactions.forEach(transaction => {
+      const { category, amount, type } = transaction;
+      if (type === 'income' && incomeByCategory.hasOwnProperty(category)) {
+        incomeByCategory[category] += amount;
+      } else if (type === 'expense' && expenseByCategory.hasOwnProperty(category)) {
+        expenseByCategory[category] += amount;
+      }
+    });
+    
+    // Convert to chart data format
+    const incomeChartData = Object.keys(incomeByCategory).map(category => ({
+      name: category,
+      value: incomeByCategory[category],
+      color: categoryColors[category]
+    })).filter(item => item.value > 0);
+    
+    const expenseChartData = Object.keys(expenseByCategory).map(category => ({
+      name: category,
+      value: expenseByCategory[category],
+      color: categoryColors[category]
+    })).filter(item => item.value > 0);
+    
+    // Monthly trend data (for bar chart)
+    const monthlyData = Array.from({ length: 6 }, (_, i) => {
+      const month = subMonths(now, 5 - i);
+      const monthStart = startOfMonth(month);
+      const monthEnd = endOfMonth(month);
+      const monthName = format(month, 'MMM');
+      
+      let monthIncome = 0;
+      let monthExpense = 0;
+      
+      transactions.forEach(transaction => {
+        const transactionDate = new Date(transaction.transaction_date);
+        if (transactionDate >= monthStart && transactionDate <= monthEnd) {
+          if (transaction.type === 'income') {
+            monthIncome += transaction.amount;
+          } else {
+            monthExpense += transaction.amount;
+          }
+        }
+      });
+      
+      return {
+        month: monthName,
+        income: monthIncome,
+        expense: monthExpense,
+        balance: monthIncome - monthExpense
+      };
+    });
+    
+    // Set report data
+    setReportData({
+      totalIncome: income,
+      totalExpense: expense,
+      balance: income - expense,
+      incomeChartData,
+      expenseChartData,
+      monthlyData
+    });
+  };
 
   if (loading) {
     return <div className="flex justify-center items-center h-full">Chargement...</div>;
@@ -355,425 +374,420 @@ const Finance = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight">Tableau financier</h1>
-        <div className="flex space-x-2">
-          <Dialog open={openCategoryDialog} onOpenChange={setOpenCategoryDialog}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <Plus className="mr-2 h-4 w-4" />
-                Nouvelle catégorie
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Créer une catégorie</DialogTitle>
-                <DialogDescription>
-                  Ajoutez une nouvelle catégorie pour vos transactions.
-                </DialogDescription>
-              </DialogHeader>
-              <Form {...categoryForm}>
-                <form onSubmit={categoryForm.handleSubmit(onCategorySubmit)} className="space-y-4">
-                  <FormField
-                    control={categoryForm.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nom</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Nom de la catégorie" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={categoryForm.control}
-                    name="type"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Type</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Type de catégorie" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="income">Revenus</SelectItem>
-                            <SelectItem value="expense">Dépenses</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={categoryForm.control}
-                    name="color"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Couleur</FormLabel>
-                        <FormControl>
-                          <Input type="color" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <DialogFooter>
-                    <Button type="submit">Créer</Button>
-                  </DialogFooter>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
-          
-          <Dialog open={openTransactionDialog} onOpenChange={setOpenTransactionDialog}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Nouvelle transaction
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Créer une transaction</DialogTitle>
-                <DialogDescription>
-                  Ajoutez une nouvelle transaction à votre tableau financier.
-                </DialogDescription>
-              </DialogHeader>
-              <Form {...transactionForm}>
-                <form onSubmit={transactionForm.handleSubmit(onTransactionSubmit)} className="space-y-4">
-                  <FormField
-                    control={transactionForm.control}
-                    name="amount"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Montant</FormLabel>
-                        <FormControl>
-                          <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={transactionForm.control}
-                    name="type"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Type</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Type de transaction" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="income">Revenus</SelectItem>
-                            <SelectItem value="expense">Dépenses</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={transactionForm.control}
-                    name="category"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Catégorie</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Sélectionner une catégorie" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {categories
-                              .filter(cat => cat.type === transactionForm.watch('type'))
-                              .map((category) => (
-                                <SelectItem key={category.id} value={category.name}>
-                                  {category.name}
-                                </SelectItem>
-                              ))}
-                            <SelectItem value="Autre">Autre</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={transactionForm.control}
-                    name="transaction_date"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Date</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={transactionForm.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Description (optionnelle)" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <DialogFooter>
-                    <Button type="submit">Créer</Button>
-                  </DialogFooter>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Solde total
-            </CardTitle>
-            <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
+      <h1 className="text-3xl font-bold tracking-tight">Finances</h1>
+      
+      <div className="flex flex-col lg:flex-row gap-4 mb-6">
+        <Card className="flex-1">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Revenus</CardTitle>
+            <CardDescription>Total des revenus</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${financialSummary.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {financialSummary.balance.toLocaleString()} €
+            <div className="text-2xl font-bold text-green-500">
+              {reportData.totalIncome?.toLocaleString() || 0} €
             </div>
-            <p className="text-xs text-muted-foreground">
-              {financialSummary.balance >= 0 ? 'Solde positif' : 'Solde négatif'}
-            </p>
           </CardContent>
+          <CardFooter className="pt-0">
+            <Dialog open={openTransactionDialog && transactionForm.getValues('type') === 'income'} 
+                   onOpenChange={(open) => {
+                     if (open) {
+                       transactionForm.setValue('type', 'income');
+                     }
+                     setOpenTransactionDialog(open);
+                   }}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" className="w-full" size="sm">
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Ajouter un revenu
+                </Button>
+              </DialogTrigger>
+            </Dialog>
+          </CardFooter>
         </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Revenus du mois
-            </CardTitle>
-            <ArrowUpRight className="h-4 w-4 text-green-600" />
+        
+        <Card className="flex-1">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Dépenses</CardTitle>
+            <CardDescription>Total des dépenses</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {financialSummary.monthlyIncome.toLocaleString()} €
+            <div className="text-2xl font-bold text-red-500">
+              {reportData.totalExpense?.toLocaleString() || 0} €
             </div>
-            <p className="text-xs text-muted-foreground">
-              Revenus pour {format(new Date(), 'MMMM yyyy')}
-            </p>
           </CardContent>
+          <CardFooter className="pt-0">
+            <Dialog open={openTransactionDialog && transactionForm.getValues('type') === 'expense'} 
+                   onOpenChange={(open) => {
+                     if (open) {
+                       transactionForm.setValue('type', 'expense');
+                     }
+                     setOpenTransactionDialog(open);
+                   }}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" className="w-full" size="sm">
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Ajouter une dépense
+                </Button>
+              </DialogTrigger>
+            </Dialog>
+          </CardFooter>
         </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Dépenses du mois
-            </CardTitle>
-            <ArrowDownRight className="h-4 w-4 text-red-600" />
+        
+        <Card className="flex-1">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Balance</CardTitle>
+            <CardDescription>Revenus - Dépenses</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {financialSummary.monthlyExpenses.toLocaleString()} €
+            <div className={`text-2xl font-bold ${reportData.balance >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+              {reportData.balance?.toLocaleString() || 0} €
             </div>
-            <p className="text-xs text-muted-foreground">
-              Dépenses pour {format(new Date(), 'MMMM yyyy')}
-            </p>
           </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Balance mensuelle
-            </CardTitle>
-            <Wallet className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${financialSummary.monthlyBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {financialSummary.monthlyBalance.toLocaleString()} €
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {financialSummary.monthlyBalance >= 0 ? 'Economies' : 'Déficit'} ce mois
-            </p>
-          </CardContent>
+          <CardFooter className="pt-0">
+            <Dialog open={openCategoryDialog} onOpenChange={setOpenCategoryDialog}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" className="w-full" size="sm">
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Ajouter une catégorie
+                </Button>
+              </DialogTrigger>
+            </Dialog>
+          </CardFooter>
         </Card>
       </div>
-
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Aperçu</TabsTrigger>
-          <TabsTrigger value="transactions">Transactions</TabsTrigger>
-        </TabsList>
-        <TabsContent value="overview">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-            <Card className="col-span-7 md:col-span-5">
-              <CardHeader>
-                <CardTitle>Revenus et Dépenses</CardTitle>
-                <div className="flex items-center space-x-2">
-                  <Button 
-                    variant={timeRange === 'month' ? 'default' : 'outline'} 
-                    size="sm" 
-                    onClick={() => setTimeRange('month')}
-                  >
-                    Mois
-                  </Button>
-                  <Button 
-                    variant={timeRange === 'quarter' ? 'default' : 'outline'} 
-                    size="sm" 
-                    onClick={() => setTimeRange('quarter')}
-                  >
-                    Trimestre
-                  </Button>
-                  <Button 
-                    variant={timeRange === 'year' ? 'default' : 'outline'} 
-                    size="sm" 
-                    onClick={() => setTimeRange('year')}
-                  >
-                    Année
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="pl-2">
-                <ChartContainer config={{ revenus: {}, dépenses: {}, balance: {} }} className="aspect-[3/2]">
-                  <AreaChart
-                    data={monthlyData}
-                    margin={{
-                      top: 10,
-                      right: 30,
-                      left: 0,
-                      bottom: 0,
-                    }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Area type="monotone" dataKey="revenus" stroke="#9b87f5" fill="#9b87f5" />
-                    <Area type="monotone" dataKey="dépenses" stroke="#F97316" fill="#FEC6A1" />
-                    <Area type="monotone" dataKey="balance" stroke="#0EA5E9" fill="#D3E4FD" />
-                  </AreaChart>
-                </ChartContainer>
-              </CardContent>
-            </Card>
-            <Card className="col-span-7 md:col-span-2">
-              <CardHeader>
-                <CardTitle>Dépenses par catégorie</CardTitle>
-                <CardDescription>
-                  Distribution des dépenses
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pl-2">
-                <div className="h-[300px]">
+      
+      <Dialog open={openTransactionDialog} onOpenChange={setOpenTransactionDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>
+              {transactionForm.getValues('type') === 'income' ? 'Ajouter un revenu' : 'Ajouter une dépense'}
+            </DialogTitle>
+            <DialogDescription>
+              Enregistrez une nouvelle transaction dans votre suivi financier.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...transactionForm}>
+            <form onSubmit={transactionForm.handleSubmit(onTransactionSubmit)} className="space-y-4">
+              <FormField
+                control={transactionForm.control}
+                name="amount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Montant (€)</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={transactionForm.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Catégorie</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner une catégorie" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {categories
+                          .filter(cat => cat.type === transactionForm.getValues('type'))
+                          .map(category => (
+                            <SelectItem key={category.id} value={category.name}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    {categories.filter(cat => cat.type === transactionForm.getValues('type')).length === 0 && (
+                      <FormDescription className="text-yellow-500">
+                        Aucune catégorie disponible. Créez-en une d'abord.
+                      </FormDescription>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={transactionForm.control}
+                name="transaction_date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={transactionForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Description de la transaction" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <DialogFooter>
+                <Button type="submit">Enregistrer</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={openCategoryDialog} onOpenChange={setOpenCategoryDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Ajouter une catégorie</DialogTitle>
+            <DialogDescription>
+              Créez une nouvelle catégorie pour classer vos transactions.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...categoryForm}>
+            <form onSubmit={categoryForm.handleSubmit(onCategorySubmit)} className="space-y-4">
+              <FormField
+                control={categoryForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nom de la catégorie</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ex: Alimentation, Loyer, Salaire..." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={categoryForm.control}
+                name="type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Type</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner un type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="income">Revenu</SelectItem>
+                        <SelectItem value="expense">Dépense</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={categoryForm.control}
+                name="color"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Couleur</FormLabel>
+                    <FormControl>
+                      <div className="flex gap-2 items-center">
+                        <Input type="color" {...field} className="w-12 h-10" />
+                        <div className="text-sm">{field.value}</div>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <DialogFooter>
+                <Button type="submit">Créer</Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Charts */}
+        <Card>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <CardTitle>Analyse des dépenses et revenus</CardTitle>
+              
+              <Select value={period} onValueChange={(value) => {
+                setPeriod(value);
+                generateReports(transactions, categories, value);
+              }}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Période" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="month">Ce mois</SelectItem>
+                  <SelectItem value="3months">Derniers 3 mois</SelectItem>
+                  <SelectItem value="6months">Derniers 6 mois</SelectItem>
+                  <SelectItem value="all">Toutes les données</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="bar" className="space-y-4">
+              <TabsList>
+                <TabsTrigger value="bar">Évolution</TabsTrigger>
+                <TabsTrigger value="expense">Dépenses</TabsTrigger>
+                <TabsTrigger value="income">Revenus</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="bar" className="space-y-4">
+                <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={pieChartData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        outerRadius="70%"
-                        fill="#8884d8"
-                        dataKey="value"
-                        nameKey="name"
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                      >
-                        {pieChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => `${parseFloat(value as string).toLocaleString()} €`} />
-                    </PieChart>
+                    <BarChart data={reportData.monthlyData || []}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => `${Number(value).toLocaleString()} €`} />
+                      <Legend />
+                      <Bar dataKey="income" name="Revenus" fill="#22c55e" />
+                      <Bar dataKey="expense" name="Dépenses" fill="#ef4444" />
+                    </BarChart>
                   </ResponsiveContainer>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+              </TabsContent>
+              
+              <TabsContent value="expense" className="space-y-4">
+                {reportData.expenseChartData?.length > 0 ? (
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={reportData.expenseChartData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          fill="#8884d8"
+                          paddingAngle={1}
+                          dataKey="value"
+                          nameKey="name"
+                          label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        >
+                          {reportData.expenseChartData.map((entry: any, index: number) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => `${Number(value).toLocaleString()} €`} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    Aucune donnée de dépense disponible pour cette période
+                  </div>
+                )}
+              </TabsContent>
+              
+              <TabsContent value="income" className="space-y-4">
+                {reportData.incomeChartData?.length > 0 ? (
+                  <div className="h-[300px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={reportData.incomeChartData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          fill="#8884d8"
+                          paddingAngle={1}
+                          dataKey="value"
+                          nameKey="name"
+                          label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        >
+                          {reportData.incomeChartData.map((entry: any, index: number) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => `${Number(value).toLocaleString()} €`} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    Aucune donnée de revenu disponible pour cette période
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
         
-        <TabsContent value="transactions">
-          <Card>
-            <CardHeader>
-              <CardTitle>Historique des transactions</CardTitle>
-              <div className="flex justify-between">
-                <CardDescription>
-                  Vos dernières transactions
-                </CardDescription>
-                <Button variant="outline" size="sm">
-                  <Filter className="mr-2 h-4 w-4" />
-                  Filtrer
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Catégorie</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Montant</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-10">
-                        Aucune transaction trouvée. Créez votre première transaction!
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    transactions.map((transaction) => (
-                      <TableRow key={transaction.id}>
-                        <TableCell>
-                          {format(parseISO(transaction.transaction_date), 'dd/MM/yyyy')}
-                        </TableCell>
-                        <TableCell>{transaction.category}</TableCell>
-                        <TableCell>
-                          {transaction.description || <span className="text-muted-foreground">-</span>}
-                        </TableCell>
-                        <TableCell className={`text-right font-medium ${transaction.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                          {transaction.type === 'income' ? '+' : '-'} 
-                          {parseFloat(transaction.amount).toLocaleString()} €
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-                <TableFooter>
-                  <TableRow>
-                    <TableCell colSpan={3}>Total</TableCell>
-                    <TableCell className="text-right">
-                      {financialSummary.balance.toLocaleString()} €
-                    </TableCell>
-                  </TableRow>
-                </TableFooter>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+        {/* Recent transactions */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Transactions récentes</CardTitle>
+          </CardHeader>
+          <CardContent className="px-0">
+            <div className="max-h-[400px] overflow-auto">
+              {transactions.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  Aucune transaction enregistrée
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {transactions.slice(0, 10).map(transaction => (
+                    <div 
+                      key={transaction.id} 
+                      className="flex justify-between items-center px-6 py-2 hover:bg-muted/50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-full ${transaction.type === 'income' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                          {transaction.type === 'income' ? (
+                            <ArrowUpCircle className="h-4 w-4" />
+                          ) : (
+                            <ArrowDownCircle className="h-4 w-4" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="font-medium">{transaction.category}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {transaction.description || 'Aucune description'} • {new Date(transaction.transaction_date).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`font-medium ${transaction.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                          {transaction.type === 'income' ? '+' : '-'} {transaction.amount.toLocaleString()} €
+                        </span>
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => handleDeleteTransaction(transaction.id)}
+                        >
+                          <Trash className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

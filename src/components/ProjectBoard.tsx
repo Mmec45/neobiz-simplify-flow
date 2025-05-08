@@ -115,10 +115,15 @@ const ProjectBoard = ({ projects }: ProjectBoardProps) => {
 
   const onTaskSubmit = async (values: z.infer<typeof taskFormSchema>) => {
     try {
+      // Fix: Ensure title is not optional and properly typed
       const taskData = {
-        ...values,
-        user_id: user?.id,
+        title: values.title,  // Required field
+        description: values.description,
+        status: values.status,
+        priority: values.priority,
         project_id: selectedProject,
+        user_id: user?.id,
+        due_date: values.due_date || null,
         time_estimate: values.time_estimate ? parseInt(values.time_estimate) : null,
       };
       
@@ -180,7 +185,7 @@ const ProjectBoard = ({ projects }: ProjectBoardProps) => {
   };
 
   // Update task status when dragged to a different column
-  const handleDragOver = (e: React.DragOverEvent) => {
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
   };
 
