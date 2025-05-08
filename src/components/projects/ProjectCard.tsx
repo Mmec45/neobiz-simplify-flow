@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { MoreVertical, Clock, CalendarIcon } from 'lucide-react';
+import { MoreVertical, Clock, CalendarIcon, Timer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -93,6 +93,13 @@ const ProjectCard = ({ project, onEdit, onDelete, onSelect }: ProjectCardProps) 
             </div>
           )}
         </div>
+
+        {project.total_time_spent !== undefined && (
+          <div className="flex items-center mt-3 text-xs">
+            <Timer className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
+            <span>Temps total: {project.total_time_spent} heures</span>
+          </div>
+        )}
       </CardContent>
       <CardFooter className="border-t pt-3 pb-3 bg-muted/50">
         <div className="flex justify-between w-full">

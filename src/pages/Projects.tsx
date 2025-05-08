@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import * as z from 'zod';
 
-// Import the new components
+// Import the components
 import ProjectForm from '@/components/projects/ProjectForm';
 import ProjectList from '@/components/projects/ProjectList';
 import ProjectBoard from '@/components/ProjectBoard';
@@ -64,7 +64,24 @@ const Projects = () => {
           
         if (clientsError) throw clientsError;
         
-        setProjects(projectsData || []);
+        // Fetch project tasks to calculate time spent on each project
+        const { data: tasksData, error: tasksError } = await supabase
+          .from('project_tasks')
+          .select('id, project_id, time_spent');
+          
+        if (tasksError) throw tasksError;
+        
+        // Calculate total time spent on each project
+        const projectsWithTime = projectsData?.map(project => {
+          const projectTasks = tasksData?.filter(task => task.project_id === project.id) || [];
+          const total_time_spent = projectTasks.reduce((sum, task) => sum + (task.time_spent || 0), 0);
+          return {
+            ...project,
+            total_time_spent
+          };
+        });
+        
+        setProjects(projectsWithTime || []);
         setClients(clientsData || []);
       } catch (error) {
         console.error('Error fetching projects:', error);
@@ -124,13 +141,34 @@ const Projects = () => {
       
       if (response.error) throw response.error;
       
-      // Refresh projects
-      const { data: updatedProjects } = await supabase
-        .from('projects')
-        .select('*, clients(name)')
-        .order('created_at', { ascending: false });
+      // Refresh projects with time spent data
+      const fetchUpdatedProjects = async () => {
+        // Fetch projects
+        const { data: projectsData } = await supabase
+          .from('projects')
+          .select('*, clients(name)')
+          .order('created_at', { ascending: false });
+          
+        // Fetch tasks to calculate time spent
+        const { data: tasksData } = await supabase
+          .from('project_tasks')
+          .select('id, project_id, time_spent');
+          
+        // Calculate total time spent
+        const projectsWithTime = projectsData?.map(project => {
+          const projectTasks = tasksData?.filter(task => task.project_id === project.id) || [];
+          const total_time_spent = projectTasks.reduce((sum, task) => sum + (task.time_spent || 0), 0);
+          return {
+            ...project,
+            total_time_spent
+          };
+        });
         
-      setProjects(updatedProjects || []);
+        return projectsWithTime || [];
+      };
+
+      const updatedProjects = await fetchUpdatedProjects();
+      setProjects(updatedProjects);
       setOpen(false);
       setSelectedProject(null);
       
@@ -151,6 +189,15 @@ const Projects = () => {
 
   const handleDeleteProject = async (projectId: string) => {
     try {
+      // First delete all tasks related to the project
+      const { error: tasksError } = await supabase
+        .from('project_tasks')
+        .delete()
+        .eq('project_id', projectId);
+        
+      if (tasksError) throw tasksError;
+      
+      // Then delete the project
       const { error } = await supabase
         .from('projects')
         .delete()

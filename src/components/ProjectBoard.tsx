@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Trash2, Clock, CalendarIcon } from 'lucide-react';
+import { Plus, Trash2, Clock, CalendarIcon, Timer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -35,6 +35,7 @@ import {
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import TimeTrackingDialog from './projects/TimeTrackingDialog';
 
 interface ProjectBoardProps {
   projects: any[];
@@ -57,6 +58,8 @@ const ProjectBoard = ({ projects }: ProjectBoardProps) => {
   const [loading, setLoading] = useState(true);
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [openTaskDialog, setOpenTaskDialog] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [timeTrackingOpen, setTimeTrackingOpen] = useState(false);
   
   const taskForm = useForm<z.infer<typeof taskFormSchema>>({
     resolver: zodResolver(taskFormSchema),
@@ -125,6 +128,7 @@ const ProjectBoard = ({ projects }: ProjectBoardProps) => {
         user_id: user?.id,
         due_date: values.due_date || null,
         time_estimate: values.time_estimate ? parseInt(values.time_estimate) : null,
+        time_spent: 0, // Initialize time spent to 0
       };
       
       const { error } = await supabase
@@ -222,6 +226,55 @@ const ProjectBoard = ({ projects }: ProjectBoardProps) => {
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData('text/plain', taskId);
+  };
+
+  const handleTrackTime = (task: any) => {
+    setSelectedTask(task);
+    setTimeTrackingOpen(true);
+  };
+
+  const handleSaveTime = async (taskId: string, timeSpent: number) => {
+    try {
+      const { error } = await supabase
+        .from('project_tasks')
+        .update({ time_spent: timeSpent })
+        .eq('id', taskId);
+        
+      if (error) throw error;
+      
+      // Update task in state
+      setTasks(tasks.map(task => 
+        task.id === taskId ? { ...task, time_spent: timeSpent } : task
+      ));
+      
+      toast({
+        title: "Succès",
+        description: "Temps enregistré avec succès",
+      });
+
+      // Update project total time spent
+      await updateProjectTotalTime();
+    } catch (error) {
+      console.error('Error updating time spent:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de mettre à jour le temps passé",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const updateProjectTotalTime = async () => {
+    try {
+      // Calculate total time spent for all tasks in the current project
+      const totalTimeSpent = tasks.reduce((sum, task) => sum + (task.time_spent || 0), 0);
+      
+      // This is just a frontend calculation, we're not storing it in the database
+      // but you could add a column to the projects table if needed
+      console.log(`Total time spent for project ${selectedProject}: ${totalTimeSpent} hours`);
+    } catch (error) {
+      console.error('Error updating project total time:', error);
+    }
   };
 
   const priorityColors: Record<string, string> = {
@@ -439,17 +492,27 @@ const ProjectBoard = ({ projects }: ProjectBoardProps) => {
                               </p>
                             )}
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => handleDeleteTask(task.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex space-x-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={() => handleTrackTime(task)}
+                            >
+                              <Timer className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={() => handleDeleteTask(task.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                         
-                        <div className="mt-2 flex items-center justify-between">
+                        <div className="mt-2 grid grid-cols-2 gap-2">
                           <div className={`px-2 py-0.5 rounded text-white text-xs ${priorityColors[task.priority]}`}>
                             {getPriorityLabel(task.priority)}
                           </div>
@@ -458,6 +521,20 @@ const ProjectBoard = ({ projects }: ProjectBoardProps) => {
                             <div className="flex items-center text-xs text-muted-foreground">
                               <Clock className="h-3 w-3 mr-1" />
                               {new Date(task.due_date).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mt-2 flex items-center justify-between text-xs">
+                          {task.time_estimate && (
+                            <div className="flex items-center text-muted-foreground">
+                              <span>Estimé: {task.time_estimate}h</span>
+                            </div>
+                          )}
+                          {(task.time_spent !== null && task.time_spent !== undefined) && (
+                            <div className="flex items-center text-muted-foreground">
+                              <Timer className="h-3 w-3 mr-1" />
+                              <span>Passé: {task.time_spent}h</span>
                             </div>
                           )}
                         </div>
@@ -475,6 +552,16 @@ const ProjectBoard = ({ projects }: ProjectBoardProps) => {
             );
           })}
         </div>
+      )}
+
+      {/* Dialog pour le suivi du temps */}
+      {selectedTask && (
+        <TimeTrackingDialog
+          open={timeTrackingOpen}
+          onOpenChange={setTimeTrackingOpen}
+          task={selectedTask}
+          onSaveTime={handleSaveTime}
+        />
       )}
     </div>
   );
