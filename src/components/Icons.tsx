@@ -6,4 +6,3 @@ export const FileInvoice = FileText;
 export const ClipboardList = ClipboardCheck;
 export const PenTool = Pen;
 export const BarChart3 = BarChart2;
-

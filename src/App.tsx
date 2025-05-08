@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
+import Invoices from "./pages/Invoices";
 import NotFound from "./pages/NotFound";
 import DashboardLayout from "@/components/DashboardLayout";
 import AIAssistant from "./pages/AIAssistant";
@@ -52,19 +53,17 @@ const App = () => (
                 </DashboardLayout>
               </AuthGuard>
             } />
-
-            {/* Placeholder routes - will be implemented in future updates */}
+            
+            {/* Invoices route */}
             <Route path="/invoices" element={
               <AuthGuard>
                 <DashboardLayout>
-                  <div className="p-6">
-                    <h1 className="text-3xl font-bold mb-6">Gestion des factures</h1>
-                    <p>Cette fonctionnalité sera disponible prochainement.</p>
-                  </div>
+                  <Invoices />
                 </DashboardLayout>
               </AuthGuard>
             } />
 
+            {/* Placeholder routes - will be implemented in future updates */}
             <Route path="/tasks" element={
               <AuthGuard>
                 <DashboardLayout>
